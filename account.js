@@ -64,7 +64,9 @@ window.StudyFlow=(()=>{
   $('#importLegacy').onclick=async()=>{if(!confirm('将此浏览器旧版的学习数据导入当前账号？这会替换当前账号的数据。'))return;try{const data=JSON.parse(localStorage.getItem('studyflow.v1'));if(!data||!Array.isArray(data.tasks)||!Array.isArray(data.blocks))throw new Error('旧数据格式不正确');core.set(data);core.render();mark();if(await flush()){$('#importLegacy').hidden=true;core.toast('旧数据已导入后台')}}catch(e){message(e.message)}};
   window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
   window.addEventListener('online',()=>{if(!blocked)flush()});
-  api('/me').then(enter).catch(e=>{showLogin();if(e.status!==401)$('#authError').textContent='暂时无法连接后台，请确认服务已启动后重试'});
+  const bootControls=document.querySelectorAll('#authForm input,#authForm button,[data-auth-mode]');
+  bootControls.forEach(el=>el.disabled=true);
+  api('/me').then(enter).catch(e=>{showLogin();if(e.status!==401)$('#authError').textContent='暂时无法连接后台，请确认服务已启动后重试'}).finally(()=>bootControls.forEach(el=>el.disabled=false));
  }
  return {mount,save:mark,active:()=>!!user,exportData};
 })();
