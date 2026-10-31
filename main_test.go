@@ -174,3 +174,29 @@ func TestConcurrentWrites(t *testing.T) {
 		t.Fatalf("lost update protection: %d successful, %d conflicts", success, conflict)
 	}
 }
+
+func TestSubpathAndHealth(t *testing.T) {
+	db, err := openDB(filepath.Join(t.TempDir(), "study.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	app := &server{db: db, basePath: "/study-flow"}
+	srv := httptest.NewServer(http.StripPrefix("/study-flow", app.routes()))
+	defer srv.Close()
+	c := newClient(t, srv.URL)
+	c.request("GET", "/study-flow/healthz", "", 200)
+	c.request("GET", "/study-flow/", "", 200)
+	c.request("GET", "/study-flow/account.js", "", 200)
+	c.request("POST", "/study-flow/api/login", credentials("admin", "110623"), 200)
+	c.request("GET", "/study-flow/api/me", "", 200)
+	app.secure = true
+	w := httptest.NewRecorder()
+	app.cookie(w, "example", 3600)
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Path != "/study-flow/" || !cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
+		t.Fatalf("wrong cookie scope: %v", cookies)
+	}
+	db.Close()
+	c.request("GET", "/study-flow/healthz", "", 503)
+}

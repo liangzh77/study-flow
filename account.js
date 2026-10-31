@@ -5,7 +5,7 @@ window.StudyFlow=(()=>{
  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let core,user=null,pendingUser=null,revision=0,dirty=false,saving=null,blocked=false,loading=false,serial=0,debounce,register=false;
  async function api(path,method='GET',data){
-  const response=await fetch('/api'+path,{method,credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
+  const response=await fetch('./api'+path,{method,credentials:'same-origin',headers:data===undefined?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
   let result;try{result=await response.json()}catch{throw new Error('服务器返回异常，请稍后重试')}
   if(!response.ok){const error=new Error(result.error||'操作失败');error.status=response.status;throw error}return result;
  }

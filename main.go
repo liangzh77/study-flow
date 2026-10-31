@@ -34,6 +34,7 @@ var assets embed.FS
 type server struct {
 	db       *sql.DB
 	secure   bool
+	basePath string
 	attempts sync.Map
 }
 type user struct {
@@ -124,7 +125,7 @@ func tokenHash(token string) string {
 	return hex.EncodeToString(h[:])
 }
 func (s *server) cookie(w http.ResponseWriter, token string, age int) {
-	http.SetCookie(w, &http.Cookie{Name: "studyflow_session", Value: token, Path: "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteStrictMode, MaxAge: age})
+	http.SetCookie(w, &http.Cookie{Name: "studyflow_session", Value: token, Path: s.basePath + "/", HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteStrictMode, MaxAge: age})
 }
 func (s *server) current(r *http.Request) (user, error) {
 	var u user
@@ -258,6 +259,14 @@ func (s *server) internal(w http.ResponseWriter, err error) {
 }
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		var one int
+		if err := s.db.QueryRowContext(r.Context(), "SELECT 1").Scan(&one); err != nil {
+			fail(w, http.StatusServiceUnavailable, "数据库不可用")
+			return
+		}
+		jsonReply(w, 200, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /api/register", s.auth)
 	mux.HandleFunc("POST /api/login", s.auth)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
@@ -588,7 +597,11 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	s := &server{db: db, secure: os.Getenv("STUDYFLOW_SECURE_COOKIE") == "1"}
+	basePath := strings.TrimRight(os.Getenv("STUDYFLOW_BASE_PATH"), "/")
+	if !regexp.MustCompile(`^(/[a-zA-Z0-9_-]+)*$`).MatchString(basePath) {
+		log.Fatal("STUDYFLOW_BASE_PATH must be a URL path such as /study-flow")
+	}
+	s := &server{db: db, secure: os.Getenv("STUDYFLOW_SECURE_COOKIE") == "1", basePath: basePath}
 	addr := os.Getenv("STUDYFLOW_ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8080"

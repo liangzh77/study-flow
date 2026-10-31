@@ -54,6 +54,7 @@ WAL 是磁盘数据库的并发模式，不是内存数据库。Redis 是另一�
 | `STUDYFLOW_ADDR` | `127.0.0.1:8080` | 监听地址；局域网使用可设为 `0.0.0.0:8080` |
 | `STUDYFLOW_DB` | `data/studyflow.db` | 建议部署时使用固定绝对路径，避免切换工作目录后创建另一份数据库 |
 | `STUDYFLOW_SECURE_COOKIE` | 未启用 | HTTPS 部署时设置为 `1`，登录 Cookie 仅经 HTTPS 发送 |
+| `STUDYFLOW_BASE_PATH` | 空 | 反代子路径，如 `/study-flow`，用于限制登录 Cookie 的路径；Caddy 需剥离该前缀 |
 
 例如在局域网提供服务：
 
@@ -64,6 +65,26 @@ $env:STUDYFLOW_DB = 'D:\StudyFlowData\studyflow.db'
 ```
 
 公网部署通过反向代理提供 HTTPS，保留原始 Host、使用同源网页与 API，并启用 Secure Cookie。首次部署后通过「修改密码」更换初始管理员密码。反向代理后的登录限流按代理连接 IP 计算，如需较多用户同时登录，应在代理层配置客户端限流并调整后端策略。
+
+## 当前云端部署
+
+正式地址：<https://mu-zhang.cn/study-flow/>。入口卡片与 Caddy 路由保存在独立的 `go-sites` 仓库；StudyFlow 源码仍保留在本仓库。
+
+- systemd 服务：`study-flow`，以独立的 `studyflow` 用户运行。
+- 后端仅监听 `127.0.0.1:8093`，Caddy 将 `/study-flow/*` 剥离前缀后转发到该端口，`/study-flow` 自动跳转为带斜杠的地址。
+- 数据库与配置：`/srv/apps/study-flow/shared/`；发布版本：`/srv/apps/study-flow/releases/`，通过 `current`、`previous` 软链接管理。
+- `/healthz` 检查数据库，正式公开路径为 `/study-flow/healthz`。
+- 初次安装的服务、配置与 Git hook 模板在 `deploy/`。服务器为本项目登记了受限 `deploy-project` 权限。
+
+后续更新先提交到 `main`，再执行：
+
+```powershell
+.\deploy.ps1
+```
+
+该脚本使用本机 SSH key，以 `deploy` 身份上传 Git bundle，再调用服务器受限部署入口；服务器运行测试、构建 Linux 程序、切换版本、重启服务并检查健康状态，失败自动恢复旧版本。数据库保留在共享目录。
+
+排查服务可在服务器执行 `systemctl status study-flow` 与 `journalctl -u study-flow`。应用回滚时，将 `current` 切回 `previous` 指向的 release 后重启服务；回滚应用不会恢复或删除数据库。
 
 ## 备份
 

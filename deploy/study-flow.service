@@ -1,0 +1,22 @@
+[Unit]
+Description=StudyFlow learning planner
+After=network.target
+
+[Service]
+Type=simple
+User=studyflow
+Group=studyflow
+WorkingDirectory=/srv/apps/study-flow/shared
+EnvironmentFile=/srv/apps/study-flow/shared/config.env
+ExecStart=/srv/apps/study-flow/current/studyflow
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/apps/study-flow/shared
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/usr/local/bin:/usr/bin:/bin"
+APP=/srv/apps/study-flow
+REPO=/srv/git/study-flow.git
+BUILD=/srv/build/study-flow
+exec 9>/var/lock/study-flow-deploy.lock
+flock 9
+revision=''
+while read -r old new ref; do
+  if [[ "$ref" == refs/heads/main && ! "$new" =~ ^0+$ ]]; then revision="$new"; fi
+done
+[[ -n "$revision" ]] || exit 0
+mkdir -p "$BUILD" "$APP/releases"
+git --git-dir="$REPO" --work-tree="$BUILD" checkout -f "$revision"
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+cd "$BUILD"
+go test ./...
+go build -trimpath -o "$BUILD/studyflow" .
+release="$APP/releases/$(date -u +%Y%m%d-%H%M%S)-${revision:0:8}"
+mkdir -p "$release"
+install -m 755 "$BUILD/studyflow" "$release/studyflow"
+printf '%s\n' "$revision" >"$release/revision"
+old_current=$(readlink -f "$APP/current" || true)
+switched=false
+rollback() {
+  result=$?
+  if [[ "$result" != 0 && "$switched" == true ]]; then
+    if [[ -n "$old_current" && -x "$old_current/studyflow" ]]; then
+      ln -sfn "$old_current" "$APP/current.next"
+      mv -Tf "$APP/current.next" "$APP/current"
+      systemctl restart study-flow || true
+      echo "Deployment failed; restored $old_current" >&2
+    else
+      systemctl stop study-flow || true
+      echo 'Initial deployment failed; service stopped' >&2
+    fi
+  fi
+  exit "$result"
+}
+trap rollback EXIT
+ln -sfn "$release" "$APP/current.next"
+mv -Tf "$APP/current.next" "$APP/current"
+switched=true
+systemctl restart study-flow
+healthy=false
+for attempt in {1..20}; do
+  if curl -fsS --max-time 2 http://127.0.0.1:8093/healthz >/dev/null; then healthy=true; break; fi
+  sleep 0.5
+done
+if [[ "$healthy" != true ]]; then journalctl -u study-flow -n 20 --no-pager; exit 1; fi
+if [[ -n "$old_current" && "$old_current" != "$release" ]]; then
+  ln -sfn "$old_current" "$APP/previous"
+fi
+echo "StudyFlow deployed: $release"
